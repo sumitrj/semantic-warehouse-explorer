@@ -1,4 +1,4 @@
-# Semantic data explorer
+# Semantic Warehouse Explorer
 
 This is a unique combination of LLMs and ML algorithms along with EDA tools to perform semantic exploration of data with the user. This is designed to enable deeper diagnostic insights, and is very primitive and abstract in current design (works though).
 
