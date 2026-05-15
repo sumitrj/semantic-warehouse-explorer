@@ -1,5 +1,13 @@
 # Setup
 
+Basically
+
+```
+cd docker
+docker compose up --build -d
+```
+Should work, if it doesn't continue reading.
+
 ## Prerequisites
 
 | Requirement | Minimum version | Notes |
@@ -9,13 +17,14 @@
 | Docker + Compose | any recent | needed for Postgres, MLflow, and Ollama |
 | 4 GB RAM free | — | Ollama + the 3B model fits comfortably |
 
-## Step 1 — Start the supporting services
+## Step 1 — Start the backing services
 
-All three backing services (Postgres, MLflow, Ollama) are defined in `docker/docker-compose.yml`.
+`docker/docker-compose.yml` defines four services: `postgres`, `mlflow`, `ollama`, and `frontend`.
+For local development, start only the three backing services — the frontend runs with `npm run dev` (Step 3):
 
 ```bash
 cd docker
-docker compose up -d
+docker compose up -d postgres mlflow ollama
 ```
 
 Wait for the Postgres health check to go green (roughly 10 seconds):
@@ -30,41 +39,45 @@ docker compose ps   # STATE should be "healthy" for postgres
 docker exec -it docker-ollama-1 ollama pull qwen2.5:3b
 ```
 
-> The Ollama container name may vary. Run `docker ps` to find the exact name if the above command fails.
+> The Ollama container name defaults to `docker-ollama-1` when started from the `docker/` directory. Run `docker ps` to confirm the name if the command above fails.
 
-### Service URLs (defaults)
+### Service URLs
 
-| Service | URL |
-|---------|-----|
-| Postgres | `localhost:5432` |
-| MLflow UI | `http://localhost:5050` |
-| Ollama API | `http://localhost:11434` |
+| Service | Host URL | Notes |
+|---------|----------|-------|
+| Postgres | `localhost:5432` | App metadata |
+| MLflow UI | `http://localhost:5050` | Experiment tracking UI |
+| MLflow API | `http://localhost:5050` | Backend connects here (`MLFLOW_TRACKING_URI`) |
+| Ollama API | `http://localhost:11434` | Local LLM inference |
 
-> **macOS note:** macOS ControlCenter sometimes binds port 5000, which is why MLflow's container port (5000) is mapped to host port 5050.
+> **Port note:** The MLflow container listens internally on port 5000, mapped to host port **5050** (`5050:5000`). Both `.env.example` and `MLFLOW_TRACKING_URI` use `5050`. macOS ControlCenter can bind port 5000, which is why 5050 is used.
 
 ## Step 2 — Backend
 
+Run all commands from the repo root (`semantic-warehouse-explorer/`):
+
 ```bash
-# From the repo root
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
 pip install -e .                   # installs semexp + all dependencies
 ```
 
-Copy the environment template and edit if needed:
+Copy the environment template:
 
 ```bash
 cp .env.example .env
 ```
 
-The defaults in `.env.example` point to the Docker services started above. No edits are required for the local Ollama setup.
+The defaults in `.env.example` point to the Docker services started above. No edits are needed for the local Ollama setup.
 
-Start the backend:
+Start the backend **from the repo root**:
 
 ```bash
-uvicorn backend.api.main:app --reload --port 8000
+.venv/bin/python3.13 -m uvicorn backend.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
+
+> **Note:** Use `python3.13 -m uvicorn` rather than `.venv/bin/uvicorn` directly — the script shebang can break if the repo is moved or renamed. Always run from the `semantic-warehouse-explorer/` directory so DuckDB's `./data/semexp.duckdb` path resolves correctly.
 
 On first boot you will see seed output like:
 
@@ -91,7 +104,11 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-Vite proxies all `/api` requests to the backend at port 8000 (see `frontend/vite.config.ts`), so no CORS configuration is needed in development.
+Vite proxies `/api`, `/config`, `/spaces`, and `/health` to the backend at port 8000 (see `frontend/vite.config.ts`), so no CORS configuration is needed in development.
+
+### Containerised frontend (optional)
+
+`docker-compose.yml` also includes a `frontend` service (`Dockerfile` in `frontend/`). This is for fully containerised deployment where a `backend` service exists on the same Docker network. For local development the `npm run dev` path above is recommended — it gives hot module replacement and avoids the Docker networking constraint.
 
 ## Environment variables reference
 
@@ -101,7 +118,7 @@ All variables are read from `.env` (or environment) via `backend/core/settings.p
 |----------|---------|-------------|
 | `POSTGRES_URL` | `postgresql+psycopg://semexp:semexp@localhost:5432/semexp` | SQLAlchemy connection string for Postgres |
 | `DUCKDB_PATH` | `./data/semexp.duckdb` | Path to the DuckDB file |
-| `MLFLOW_TRACKING_URI` | `http://localhost:5000` | MLflow server — note this is the **internal** container port |
+| `MLFLOW_TRACKING_URI` | `http://localhost:5050` | MLflow tracking server (host port, not container-internal port) |
 | `MLFLOW_EXPERIMENT` | `semexp` | MLflow experiment name |
 | `LITELLM_MODEL` | `ollama/qwen2.5:3b` | LiteLLM model identifier (see [usage.md](usage.md#swapping-the-llm-provider) for other providers) |
 | `LITELLM_API_BASE` | `http://localhost:11434` | Only required for Ollama; cloud providers auto-detect |
@@ -110,6 +127,8 @@ All variables are read from `.env` (or environment) via `backend/core/settings.p
 | `SEED_DEFAULT_DATASET` | `true` | Set to `false` to skip synthetic data generation on boot |
 | `DEFAULT_DATASET_NAME` | `default_entities` | DuckDB table name for the synthetic seed dataset |
 | `DEFAULT_DATASET_SIZE` | `1500` | Number of rows to generate in the synthetic dataset |
+
+> **MLflow resilience:** All MLflow logging outside the clustering pipeline (EDA, join discovery, training schema) is best-effort. The wizard steps complete successfully even if MLflow is unreachable; affected `mlflow_run_id` columns will be `null`.
 
 ## Choosing a different LLM provider
 
@@ -146,8 +165,21 @@ Postgres tables are created automatically by SQLAlchemy on first boot (`Base.met
 ## Verifying the installation
 
 ```bash
+# Backend health
 curl http://localhost:8000/health
 # {"status": "ok", "model": "ollama/qwen2.5:3b"}
+
+# Sources seeded
+curl http://localhost:8000/api/sources
+# [...{"name": "local-duckdb", "kind": "duckdb_native"}...]
+
+# Spaces seeded
+curl http://localhost:8000/spaces
+# [...{"name": "sample_loyalty", "tables": ["tiers","members",...]}...]
+
+# MLflow reachable
+curl http://localhost:5050/health
+# OK
 ```
 
 Open the MLflow UI at `http://localhost:5050` — after your first clustering run you will see an experiment named `semexp` with one run containing params, metrics, and an `algorithm_config.json` artifact.

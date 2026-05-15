@@ -208,22 +208,26 @@ class _JoinDiscoveryPyfunc(mlflow.pyfunc.PythonModel):
 
 
 def log_join_discovery_run(tables: list[str], candidates: list[JoinCandidate]) -> str:
-    """Log a join-discovery session to MLflow. Returns run_id."""
-    mlflow.set_experiment(settings.mlflow_experiment)
-    with mlflow.start_run(run_name=f"joins__{'+'.join(tables[:3])}") as run:
-        mlflow.log_param("tables", ",".join(tables))
-        mlflow.log_param("n_tables", len(tables))
-        mlflow.log_metric("n_candidates", len(candidates))
-        mlflow.log_metric("n_fk", sum(1 for c in candidates if c.join_type == "fk"))
-        mlflow.log_metric("n_natural", sum(1 for c in candidates if c.join_type == "natural"))
+    """Log a join-discovery session to MLflow. Returns run_id, or '' if MLflow is unavailable."""
+    try:
+        mlflow.set_experiment(settings.mlflow_experiment)
+        with mlflow.start_run(run_name=f"joins__{'+'.join(tables[:3])}") as run:
+            mlflow.log_param("tables", ",".join(tables))
+            mlflow.log_param("n_tables", len(tables))
+            mlflow.log_metric("n_candidates", len(candidates))
+            mlflow.log_metric("n_fk", sum(1 for c in candidates if c.join_type == "fk"))
+            mlflow.log_metric("n_natural", sum(1 for c in candidates if c.join_type == "natural"))
 
-        mlflow.log_dict(
-            {"tables": tables, "candidates": [asdict(c) for c in candidates]},
-            "join_candidates.json",
-        )
-        mlflow.pyfunc.log_model(
-            artifact_path="join_discovery_tool",
-            python_model=_JoinDiscoveryPyfunc(),
-        )
+            mlflow.log_dict(
+                {"tables": tables, "candidates": [asdict(c) for c in candidates]},
+                "join_candidates.json",
+            )
+            mlflow.pyfunc.log_model(
+                artifact_path="join_discovery_tool",
+                python_model=_JoinDiscoveryPyfunc(),
+            )
 
-        return run.info.run_id
+            return run.info.run_id
+    except Exception as e:
+        print(f"[mlflow] Join discovery run failed to log: {e}")
+        return ""

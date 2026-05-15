@@ -1,0 +1,25 @@
+reward_id,member_id,reward_type,points_cost,redeemed_at,status
+RWD0001,MBR0006,Travel Upgrade,2520,2024-08-24,redeemed
+RWD0002,MBR0007,Voucher,519,2024-12-10,redeemed
+RWD0003,MBR0013,Travel Upgrade,1923,2024-08-16,redeemed
+RWD0004,MBR0016,Travel Upgrade,1963,2024-07-25,pending
+RWD0005,MBR0017,Voucher,4745,2024-08-19,expired
+RWD0006,MBR0018,Travel Upgrade,2135,2024-03-01,redeemed
+RWD0007,MBR0021,Travel Upgrade,1907,2024-11-27,pending
+RWD0008,MBR0022,Travel Upgrade,4554,2024-05-16,redeemed
+RWD0009,MBR0024,Partner Miles,3512,2024-06-08,redeemed
+RWD0010,MBR0026,Partner Miles,10985,2024-07-10,redeemed
+RWD0011,MBR0027,VIP Experience,12852,2024-12-15,redeemed
+RWD0012,MBR0028,Cashback,7644,2024-03-12,redeemed
+RWD0013,MBR0029,Cashback,3043,2024-07-02,pending
+RWD0014,MBR0030,Voucher,9480,2024-06-28,redeemed
+RWD0015,MBR0031,Travel Upgrade,4250,2024-03-09,expired
+RWD0016,MBR0032,Partner Miles,8758,2024-11-07,redeemed
+RWD0017,MBR0033,Partner Miles,7182,2024-11-27,redeemed
+RWD0018,MBR0034,VIP Experience,7763,2024-10-18,redeemed
+RWD0019,MBR0035,VIP Experience,10051,2024-02-13,redeemed
+RWD0020,MBR0036,VIP Experience,4136,2024-10-26,redeemed
+RWD0021,MBR0024,Travel Upgrade,4892,2024-12-21,redeemed
+RWD0022,MBR0033,VIP Experience,10982,2024-09-21,redeemed
+RWD0023,MBR0022,Travel Upgrade,5450,2024-08-02,pending
+RWD0024,MBR0026,Partner Miles,5731,2024-03-23,redeemed

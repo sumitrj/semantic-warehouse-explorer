@@ -18,6 +18,7 @@ from backend.repositories import SourceRepository
 from backend.api.routes import sources, clusterings, interpretations, actions, recommendations, preprocessing
 from backend.api.routes import config as config_routes
 from backend.api.routes import spaces as spaces_routes
+from backend.api.routes import llm_config as llm_config_routes
 
 
 @asynccontextmanager
@@ -34,6 +35,9 @@ async def lifespan(app: FastAPI):
     print(f"[seed:loyalty] {loyalty_info}")
 
     _seed_default_space()
+
+    from backend.ops.seed_prompts import seed_prompts
+    seed_prompts()
     yield
 
 
@@ -168,6 +172,7 @@ app.include_router(recommendations.router)
 app.include_router(preprocessing.router)
 app.include_router(config_routes.router)
 app.include_router(spaces_routes.router)
+app.include_router(llm_config_routes.router)
 
 
 @app.get("/health")

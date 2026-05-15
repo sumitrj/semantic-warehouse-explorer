@@ -2,42 +2,88 @@
 
 ## High-level overview
 
+```mermaid
+flowchart TD
+    Browser["🌐 Browser\nReact + MUI · localhost:5173"]
+
+    subgraph frontend ["Frontend (Vite dev server)"]
+        Vite["Vite :5173\nproxy → :8000"]
+    end
+
+    subgraph backend ["Backend (FastAPI :8000)"]
+        direction TB
+        Routes["Routes\n/api · /config · /spaces · /health"]
+        Services["Services\nclustering · EDA · joins\ninterpretation · recommendation"]
+        AI["AI Layer\nllm.py · tracking.py\nfunctions/describe_cluster\nfunctions/recommend"]
+        Routes --> Services
+        Services --> AI
+    end
+
+    subgraph docker ["Docker Compose"]
+        PG[("PostgreSQL :5432\napp metadata")]
+        MLflow["MLflow :5050\nexperiment tracking"]
+        Ollama["Ollama :11434\nlocal LLM"]
+    end
+
+    DuckDB[("DuckDB\n./data/semexp.duckdb\nOLAP · row data")]
+    Cloud["☁️ Cloud LLMs\nOpenAI · Anthropic · Gemini"]
+
+    Browser --> Vite
+    Vite -->|"proxy /api /config\n/spaces /health"| Routes
+    Services -->|"metadata\nread/write"| PG
+    Services -->|"row queries\nfeature matrix"| DuckDB
+    AI -->|"log params\nmetrics · artifacts\n(best-effort)"| MLflow
+    AI -->|"LiteLLM"| Ollama
+    AI -->|"LiteLLM\n(optional)"| Cloud
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Browser (React + MUI)                   │
-│  Explorer · Sources · Config Wizard · Actions · Recommendations │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │ /api  (proxied by Vite in dev)
-┌───────────────────────────▼─────────────────────────────────────┐
-│                    FastAPI  (port 8000)                         │
-│  routes/  ← schemas ← services ← repositories ← domain models  │
-└──────┬──────────────────────────┬──────────────────────────────┘
-       │                          │
-┌──────▼──────┐          ┌────────▼────────┐
-│  Postgres   │          │    DuckDB        │
-│  (metadata) │          │  (OLAP / data)   │
-└─────────────┘          └────────┬─────────┘
-                                  │
-                         ┌────────▼────────┐
-                         │  feature_extractor│
-                         │  NumPy matrix    │
-                         └────────┬─────────┘
-                                  │
-                         ┌────────▼────────┐
-                         │  algorithm.run()│
-                         │  KMeans/DBSCAN/ │
-                         │  Agglom./GMM    │
-                         └────────┬─────────┘
-                                  │
-                    ┌─────────────▼──────────────┐
-                    │  MLflow  (lineage / metrics) │
-                    └─────────────────────────────┘
-                                  │
-                    ┌─────────────▼──────────────┐
-                    │  LiteLLM → any LLM provider │
-                    │  (Ollama / OpenAI / Anthropic│
-                    │   / Gemini)                 │
-                    └─────────────────────────────┘
+
+### Request flow — Explorer clustering
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant V as Vite proxy
+    participant F as FastAPI
+    participant D as DuckDB
+    participant P as Postgres
+    participant M as MLflow
+
+    B->>V: POST /api/clusterings
+    V->>F: forward
+    F->>P: check config_hash (cache?)
+    alt cache hit
+        P-->>F: existing ClusteringRun
+        F-->>B: 200 (cached result)
+    else cache miss
+        F->>D: SELECT features FROM table
+        D-->>F: DataFrame
+        F->>F: extract() → NumPy matrix
+        F->>F: algorithm.run() → labels + coords
+        F->>M: log params, metrics, artifact
+        F->>P: INSERT clustering_run
+        P-->>F: ClusteringRun
+        F-->>B: 200 (new result)
+    end
+```
+
+### Config wizard flow
+
+```mermaid
+flowchart LR
+    S1["Step 1\nSpace\nselect / create\nTableSpace"]
+    S2["Step 2\nTable Explorer\nbrowse & select\nDuckDB tables"]
+    S3["Step 3\nEDA\ncolumn profiling\nsemantic types"]
+    S4["Step 4\nAssociations\njoin discovery\n+ confirmation"]
+    S5["Step 5\nML Config\nexploration vs\nprediction mode"]
+
+    S1 -->|"space set"| S2
+    S2 -->|"tables selected"| S3
+    S3 -->|"EDA done"| S4
+    S4 -->|"join confirmed"| S5
+
+    S3 -.->|"log (best-effort)"| MLflow2["MLflow"]
+    S4 -.->|"log (best-effort)"| MLflow2
+    S5 -.->|"log (best-effort)"| MLflow2
 ```
 
 ---
@@ -64,6 +110,8 @@ Postgres holds everything that describes *how* to explore data, not the data its
 | `join_suggestions` | Auto-discovered FK / overlap join candidates between tables |
 | `table_spaces` | Named scope grouping tables; carries a space description for LLM context |
 | `ml_configs` | Persisted ML tool configuration (exploration vs prediction mode + params) |
+| `prompt_templates` | Versioned prompt texts (system prompt + user template) per LLM function |
+| `llm_function_configs` | Per-function inference config: model override, temperature, max_tokens, active prompt FK |
 
 All IDs are UUIDs. Timestamps default to `utcnow()`. JSONB columns store structured sub-documents (configs, steps, stats).
 
@@ -79,6 +127,8 @@ The `duck()` singleton (`backend/core/duck.py`) returns a shared DuckDB connecti
 ### MLflow — experiment tracking
 
 MLflow runs as a Docker container with a SQLite backend and local artifact storage. Every clustering execution opens a parent MLflow run. LLM calls open child runs. The MLflow UI at `http://localhost:5050` shows full parameter, metric, and artifact history.
+
+All MLflow logging outside the clustering pipeline (EDA runs in `eda_service.py`, join discovery runs in `join_service.py`, training schema runs in `prediction_service.py`) is **best-effort**: if the MLflow server is unavailable, these functions log a warning and return an empty `run_id` instead of propagating a 500. The safe `mlrun()` context manager in `backend/core/mlflow_client.py` handles the same pattern for clustering and LLM runs.
 
 ---
 
@@ -134,6 +184,7 @@ Routers registered in `backend/api/main.py`:
 | `preprocessing.py` | Pipeline CRUD |
 | `config.py` | Config wizard endpoints (EDA, join discovery, ML config) |
 | `spaces.py` | Table Spaces CRUD |
+| `llm_config.py` | LLM function configs and prompt template versions |
 
 ---
 
@@ -225,32 +276,41 @@ Supported algorithms:
 
 Two public functions:
 
-**`complete_structured(system, user, schema, temperature, max_tokens) → LLMResponse`**
+**`complete_structured(system, user, schema, temperature, max_tokens, model=None) → LLMResponse`**
 
 Blocking call. Appends the JSON schema to the system prompt, requests `response_format: json_object`, parses the response, strips markdown fences if the model included them, and returns a validated `LLMResponse`. Raises `LLMError` if the model returns non-JSON or times out.
 
-**`stream_completion(system, user, temperature, max_tokens) → Iterator[str]`**
+**`stream_completion(system, user, temperature, max_tokens, model=None) → Iterator[str]`**
 
 Yields raw text tokens. No schema enforcement. Used for SSE narrative display.
 
-Both functions read `settings.litellm_model` and `settings.litellm_api_base` at call time — provider switching requires only env var changes.
+Both functions accept an optional `model` override. When `model` is `None` they fall back to `settings.litellm_model`. The `api_base` parameter is only passed to LiteLLM when the resolved model name starts with `ollama/` — cloud providers resolve their endpoints from environment variables automatically.
+
+### Prompt store (`backend/ai/prompt_store.py`)
+
+All prompt texts are stored in Postgres as `PromptTemplate` records and loaded at inference time via `get_config(function_name) → PromptConfig`. If the DB is unreachable or a function has no active prompt, the store falls back to embedded Python string defaults in `_DEFAULTS` — so LLM calls never fail due to missing prompt files.
+
+`PromptConfig` carries: `system`, `user_template`, `model` (nullable override), `temperature`, `max_tokens`, `version`, and `prompt_id`.
 
 ### MLflow tracking wrappers (`backend/ai/tracking.py`)
 
-`tracked_complete()` and `tracked_stream()` wrap the LLM functions and log function name, prompt version, model, latency, and token counts to MLflow as child runs of the current parent.
+`tracked_complete()` and `tracked_stream()` wrap the LLM functions and log function name, prompt version, model, latency, and token counts to MLflow as child runs of the current parent. Both accept a `model` override that is threaded through to `llm.py`.
 
 ### Cognitive functions (`backend/ai/functions/`)
 
-Currently one full implementation:
+Two implemented cognitive function modules:
 
 **`describe_cluster`** (`backend/ai/functions/describe_cluster.py`)
 
 - `describe_cluster(payload: ClusterDescriptionInput) → ClusterDescriptionOutput` — structured blocking call
 - `describe_cluster_stream(payload: ClusterDescriptionInput) → Iterator[str]` — streaming narrative
 
-Prompt templates live in `backend/ai/prompts/`:
-- `describe_cluster.txt` — structured prompt (system + `---` + user template)
-- `describe_cluster_narrative.txt` — narrative streaming prompt
+**`recommend`** (`backend/ai/functions/recommend.py`)
+
+- `recommend_cluster_stream(...) → Iterator[str]` — streaming cluster-level recommendation
+- `recommend_entity_stream(...) → Iterator[str]` — streaming entity-level recommendation
+
+All four functions call `get_config(function_name)` to load prompt text and inference parameters from Postgres at call time. There are no file-path dependencies.
 
 The `ClusterDescriptionOutput` schema enforces `headline` (str), `characteristics` (list of 2–4 str), and `confidence` (`high` | `medium` | `low`). `_normalize_output()` tolerates small local models returning dict objects inside the `characteristics` list.
 
@@ -295,7 +355,7 @@ The adapter registry in `adapters/__init__.py` maps `SourceKind` strings to adap
 | Charting | Chart.js 4 via `react-chartjs-2` |
 | HTTP client | `fetch` wrapped in `api/client.ts` |
 | Build | Vite |
-| Dev proxy | Vite `proxy` config → `localhost:8000` |
+| Dev proxy | Vite `proxy` config → `localhost:8000` (paths: `/api`, `/config`, `/spaces`, `/health`) |
 
 ### State management
 
@@ -314,6 +374,7 @@ Typed wrapper around `fetch`. All backend endpoints have a corresponding functio
 | `PreprocessingPage.tsx` | Pipeline management |
 | `ActionsPage.tsx` | Action catalog |
 | `RecommendationsPage.tsx` | Recommendation browser |
+| `LLMConfigPage.tsx` | LLM function + prompt management (model override, temperature, prompt versions) |
 | `config/ConfigWizard.tsx` | Multi-step wizard shell |
 | `config/Step*.tsx` | Individual wizard steps |
 
@@ -329,3 +390,4 @@ Typed wrapper around `fetch`. All backend endpoints have a corresponding functio
 4. `_bootstrap_default_entities()` — register the DuckDB source, dataset, and five feature groups in Postgres (skipped if a source already exists)
 5. `seed_loyalty()` — load the five CSV loyalty tables from `sample_data/loyalty/` into DuckDB (idempotent)
 6. `_seed_default_space()` — create the `sample_loyalty` Table Space with two feature groups and generate its description
+7. `seed_prompts()` — create one `LLMFunctionConfig` and one active `PromptTemplate` for each of the four LLM functions (`describe_cluster`, `describe_cluster_narrative`, `recommend_cluster`, `recommend_entity`); idempotent — skips any function that already has a config

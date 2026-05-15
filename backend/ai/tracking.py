@@ -19,10 +19,11 @@ def tracked_complete(
     schema: dict,
     temperature: float = 0.2,
     max_tokens: int = 800,
+    model: str | None = None,
 ) -> LLMResponse:
     with mlrun(f"llm:{function_name}", nested=True, tags={"function": function_name}):
         try:
-            mlflow.log_param("model", _model_name())
+            mlflow.log_param("model", model or _model_name())
             mlflow.log_param("prompt_version", prompt_version)
             mlflow.log_param("temperature", temperature)
             mlflow.log_text(system, "system.txt")
@@ -33,7 +34,7 @@ def tracked_complete(
         try:
             resp = complete_structured(
                 system=system, user=user, schema=schema,
-                temperature=temperature, max_tokens=max_tokens,
+                temperature=temperature, max_tokens=max_tokens, model=model,
             )
         except LLMError as e:
             try:
@@ -61,15 +62,12 @@ def tracked_stream(
     user: str,
     temperature: float = 0.3,
     max_tokens: int = 800,
+    model: str | None = None,
 ) -> Iterator[str]:
-    """Stream tokens and log the call to MLflow.
-
-    Yields tokens as they arrive. MLflow run closes after the generator
-    is exhausted (or abandoned).
-    """
+    """Stream tokens and log the call to MLflow."""
     with mlrun(f"llm:{function_name}:stream", nested=True, tags={"function": function_name, "mode": "stream"}):
         try:
-            mlflow.log_param("model", _model_name())
+            mlflow.log_param("model", model or _model_name())
             mlflow.log_param("prompt_version", prompt_version)
             mlflow.log_param("temperature", temperature)
             mlflow.log_text(system, "system.txt")
@@ -82,7 +80,7 @@ def tracked_stream(
         try:
             for token in stream_completion(
                 system=system, user=user,
-                temperature=temperature, max_tokens=max_tokens,
+                temperature=temperature, max_tokens=max_tokens, model=model,
             ):
                 full.append(token)
                 yield token

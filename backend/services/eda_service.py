@@ -183,21 +183,25 @@ class _EDAPyfunc(mlflow.pyfunc.PythonModel):
 
 
 def log_eda_run(table: str, stats: list[ColumnStats]) -> str:
-    """Log an EDA session to MLflow. Returns the MLflow run_id."""
-    mlflow.set_experiment(settings.mlflow_experiment)
-    with mlflow.start_run(run_name=f"eda__{table}") as run:
-        mlflow.log_param("table", table)
-        mlflow.log_param("n_columns", len(stats))
-        mlflow.log_param("total_rows", stats[0].total_rows if stats else 0)
+    """Log an EDA session to MLflow. Returns the MLflow run_id, or '' if MLflow is unavailable."""
+    try:
+        mlflow.set_experiment(settings.mlflow_experiment)
+        with mlflow.start_run(run_name=f"eda__{table}") as run:
+            mlflow.log_param("table", table)
+            mlflow.log_param("n_columns", len(stats))
+            mlflow.log_param("total_rows", stats[0].total_rows if stats else 0)
 
-        type_dist = Counter(s.semantic_type for s in stats)
-        for stype, cnt in type_dist.items():
-            mlflow.log_metric(f"semantic_type_{stype}", cnt)
+            type_dist = Counter(s.semantic_type for s in stats)
+            for stype, cnt in type_dist.items():
+                mlflow.log_metric(f"semantic_type_{stype}", cnt)
 
-        mlflow.log_dict(
-            {"table": table, "columns": [asdict(s) for s in stats]},
-            "eda_results.json",
-        )
-        mlflow.pyfunc.log_model(artifact_path="eda_tool", python_model=_EDAPyfunc())
+            mlflow.log_dict(
+                {"table": table, "columns": [asdict(s) for s in stats]},
+                "eda_results.json",
+            )
+            mlflow.pyfunc.log_model(artifact_path="eda_tool", python_model=_EDAPyfunc())
 
-        return run.info.run_id
+            return run.info.run_id
+    except Exception as e:
+        print(f"[mlflow] EDA run for '{table}' failed to log: {e}")
+        return ""

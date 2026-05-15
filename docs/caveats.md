@@ -2,19 +2,20 @@
 
 ## Known limitations
 
-### Single-page frontend (no wizard flow yet)
+### Backend must run from the repo root
 
-The Config Wizard steps exist as components (`Step1_DataSource.tsx` through `Step5_MLConfig.tsx`) but the Explorer is still the primary interaction surface. The intended flow — Source → Pipeline → Clustering → Recommendations — is collapsed into one screen. Expand when you have UX bandwidth.
+Uvicorn must be started from the `semantic-warehouse-explorer/` directory so that relative imports and the DuckDB file path (`./data/semexp.duckdb`) resolve correctly. If the `.venv` scripts have a stale shebang (e.g., after the repo was moved or renamed), use `python3.13 -m uvicorn` directly:
+
+```bash
+cd semantic-warehouse-explorer
+.venv/bin/python3.13 -m uvicorn backend.api.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Prompt templates are stored in Postgres and no longer depend on file paths — LLM endpoints will not 500 due to missing `.txt` files.
 
 ### Pipeline preprocessing is defined but not active
 
 `Pipeline` and its `steps` JSONB column are modelled and persisted, but `run_clustering()` does not currently apply any pipeline to the data before extracting features. The feature extractor does inline standardization and one-hot encoding. To activate pipelines, you would need to apply the step list inside `feature_extractor.py` before the sklearn transforms.
-
-### Recommendations layer is not fully implemented
-
-`ClusterDescriptionOutput` (structured interpretation) is cached and displayed. The `Recommendation` table, `RecommendationRepository`, and `recommendation_service.py` exist, but the `RecommendationsPage` in the frontend is a stub and the `recommend_cluster` and `recommend_entity` prompt templates are present but not wired to a live endpoint.
-
-To complete this layer: implement `GET /api/clusterings/{run_id}/clusters/{cluster_id}/recommend` and `GET /api/clusterings/{run_id}/entities/{entity_id}/recommend`, then connect the page.
 
 ### Unity Catalog adapter is a stub
 
@@ -54,6 +55,14 @@ DBSCAN labels outliers as cluster `-1`. The scatter plot renders these as a "Noi
 ### No streaming cache
 
 The SSE narrative stream (`interpret/stream`) is never cached. Each click streams a fresh LLM call. Only the structured interpretation is cached in Postgres. If you want to cache narrative text, add a `narrative` column to `Interpretation` and write it after the stream completes.
+
+### MLflow is optional but not invisible
+
+EDA (`log_eda_run`), join discovery (`log_join_discovery_run`), and training schema (`log_schema_run`) all catch MLflow errors and return an empty `run_id` instead of raising. The wizard steps will complete successfully even if MLflow is down, but no lineage is recorded. The `mlflow_run_id` column on the affected records will be `null`. For clustering and LLM calls, the safe `mlrun()` wrapper in `backend/core/mlflow_client.py` provides the same behaviour.
+
+### Columns ending in `_id` are silently dropped from feature extraction
+
+`feature_extractor.py` calls `_looks_like_id()` which drops any column whose name ends in `_id` (plus common names like `id`, `uuid`, `partner_id`). This applies even to columns the user explicitly added to a feature group — for example, `tier_id` in the `value_segment` group will not appear in the clustering matrix. Rename the column or add its decoded counterpart (e.g., `tier_name`) to include the signal.
 
 ### MLflow child run nesting
 

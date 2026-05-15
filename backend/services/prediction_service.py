@@ -138,22 +138,26 @@ class _SchemaBuilderPyfunc(mlflow.pyfunc.PythonModel):
 
 
 def log_schema_run(schema: TrainingSchema) -> str:
-    """Log a training schema build to MLflow. Returns run_id."""
-    mlflow.set_experiment(settings.mlflow_experiment)
-    with mlflow.start_run(
-        run_name=f"schema__{schema.target_table}__{schema.target_column}"
-    ) as run:
-        mlflow.log_param("target_table", schema.target_table)
-        mlflow.log_param("target_column", schema.target_column)
-        mlflow.log_param("model_type", schema.model_type)
-        mlflow.log_param("train_ratio", schema.train_ratio)
-        mlflow.log_metric("n_features", len(schema.features))
-        mlflow.log_metric("n_included", sum(1 for f in schema.features if f.include))
+    """Log a training schema build to MLflow. Returns run_id, or '' if MLflow is unavailable."""
+    try:
+        mlflow.set_experiment(settings.mlflow_experiment)
+        with mlflow.start_run(
+            run_name=f"schema__{schema.target_table}__{schema.target_column}"
+        ) as run:
+            mlflow.log_param("target_table", schema.target_table)
+            mlflow.log_param("target_column", schema.target_column)
+            mlflow.log_param("model_type", schema.model_type)
+            mlflow.log_param("train_ratio", schema.train_ratio)
+            mlflow.log_metric("n_features", len(schema.features))
+            mlflow.log_metric("n_included", sum(1 for f in schema.features if f.include))
 
-        mlflow.log_dict(asdict(schema), "training_schema.json")
-        mlflow.pyfunc.log_model(
-            artifact_path="schema_builder_tool",
-            python_model=_SchemaBuilderPyfunc(schema),
-        )
+            mlflow.log_dict(asdict(schema), "training_schema.json")
+            mlflow.pyfunc.log_model(
+                artifact_path="schema_builder_tool",
+                python_model=_SchemaBuilderPyfunc(schema),
+            )
 
-        return run.info.run_id
+            return run.info.run_id
+    except Exception as e:
+        print(f"[mlflow] Schema run failed to log: {e}")
+        return ""

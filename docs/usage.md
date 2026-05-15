@@ -2,16 +2,13 @@
 
 ## Overview of the UI
 
-The frontend is a single-page React application at `http://localhost:5173`. It has a persistent top navigation bar with a **Space selector** and five main pages:
+The frontend is a single-page React application at `http://localhost:5173`. It has a persistent top navigation bar with a **Space selector** and three top-level modes:
 
-| Page | Route | Purpose |
-|------|-------|---------|
-| Explorer | `/` (default) | Interactive clustering scatter plot |
-| Sources | `/sources` | Manage data sources and feature groups |
-| Preprocessing | `/preprocessing` | Inspect and define preprocessing pipelines |
-| Actions | `/actions` | Define and manage action templates |
-| Recommendations | `/recommendations` | Browse LLM-generated cluster/entity recommendations |
-| Config Wizard | `/config` | Step-by-step guided setup for new data sources |
+| Mode button | Sub-pages | Purpose |
+|-------------|-----------|---------|
+| **Explore** | Sources, Preprocessing, Explorer, Actions, Recommendations | Day-to-day data exploration |
+| **Configure** | Config Wizard (5 steps) | Guided setup for new data sources and spaces |
+| **LLM Config** | — (full-page) | Edit prompt templates and per-function inference parameters |
 
 ---
 
@@ -125,16 +122,56 @@ The Sources page lists registered data sources and lets you:
 
 ## Config Wizard
 
-The five-step config wizard guides you through connecting a new data source:
+The five-step config wizard (`/config`) guides you through setting up a new Table Space:
 
-| Step | What happens |
-|------|-------------|
-| 1 — Data Source | Choose source kind and connection details |
-| 1b — Space | Name and describe the Table Space |
-| 2 — Table Explorer | Browse and select which tables to include |
-| 3 — EDA | Run auto-profiling (null %, distinct count, semantic type detection) |
-| 4 — Associations | Auto-discover join candidates between tables based on name similarity and value overlap |
-| 5 — ML Config | Choose exploration (clustering) or prediction mode, set algorithm defaults |
+| Step | Label | What happens |
+|------|-------|-------------|
+| 1 | Space | Select an existing Table Space or create a new one (name, display name, source, tables) |
+| 2 | Table Explorer | Browse available DuckDB tables, preview rows, and confirm which tables to include |
+| 3 | EDA | Run column-level profiling — null %, distinct count, and auto-detected semantic type for every column. Override semantic types if needed. |
+| 4 | Associations | Auto-discover join candidates between tables using name similarity and value overlap heuristics. Confirm, reject, or manually add joins. |
+| 5 | ML Config | Choose exploration (clustering) or prediction mode, configure algorithm defaults, and optionally build a training schema. |
+
+Progress is tracked in the left sidebar stepper. Each step must be completed before the next is unlocked. The wizard stores state in Postgres (`table_selections`, `column_annotations`, `join_suggestions`, `ml_configs`) so it survives page reloads.
+
+---
+
+## LLM Config page
+
+The **LLM Config** mode (top nav button) gives you live control over every LLM-powered function without touching code or restarting the backend.
+
+### Function list (left panel)
+
+Four functions are registered at startup:
+
+| Function | Used by |
+|----------|---------|
+| `describe_cluster` | Structured cluster interpretation (JSON) |
+| `describe_cluster_narrative` | Streaming narrative in the cluster detail panel |
+| `recommend_cluster` | Cluster-level recommendation stream |
+| `recommend_entity` | Entity-level personalized recommendation stream |
+
+Each card shows the active prompt version, effective model, temperature, and max tokens.
+
+### Prompt tab
+
+- **System prompt** — the role/instruction block sent before the user message
+- **User template** — the message template with `{variable}` placeholders; hover a variable chip to see its description
+- **Save as new version** — creates a new `PromptTemplate` record (auto-versioned `v1`, `v2`, …) and immediately activates it; the previous version is deactivated but retained for rollback
+
+### Parameters tab
+
+| Field | Range | Effect |
+|-------|-------|--------|
+| Model | any LiteLLM string, or blank | Overrides the global `LITELLM_MODEL` for this function only; blank = use global default |
+| Temperature | 0.0 – 1.0 | Controls output randomness; lower = more deterministic |
+| Max tokens | 100 – 2000 | Hard cap on response length |
+
+Changes take effect on the next inference call — no restart required.
+
+### History tab
+
+Lists all saved prompt versions for the selected function (newest first). Click **Activate** on any row to roll back to that version.
 
 ---
 

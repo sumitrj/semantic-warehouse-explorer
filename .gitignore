@@ -98,6 +98,37 @@ ipython_config.py
 #   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
 #   This is especially recommended for binary packages to ensure reproducibility, and is more
 #   commonly ignored for libraries.
+
+# Virtual environments
+.venv/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Frontend
+**/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# macOS
+.DS_Store
+.DS_Store?
+
+# Database files
+**/*.duckdb
+**/*.duckdb.wal
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# Model artifacts
+*.pkl
+*.joblib
+*.onnx
+
 # uv.lock
 
 # poetry
@@ -148,9 +179,7 @@ activemq-data/
 *.sage.py
 
 # Environments
-.env
 .envrc
-.venv
 env/
 venv/
 ENV/

@@ -1,0 +1,10 @@
+merchant_id,merchant_name,category,region,bonus_multiplier,active
+M01,FreshBasket,Grocery,North,1.0,True
+M02,TechZone,Electronics,South,1.5,True
+M03,StyleHub,Fashion,East,1.2,True
+M04,GreenEats,Restaurant,West,1.0,True
+M05,SportsPeak,Sports,North,1.3,True
+M06,HomeCraft,Home,Central,1.0,True
+M07,LuxeTravel,Travel,East,2.0,True
+M08,PharmaCare,Health,West,1.0,True
+M09,BooksWorld,Books,South,1.1,True

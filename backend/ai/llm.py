@@ -1,14 +1,11 @@
 """LiteLLM chokepoint — all LLM calls flow through here.
 
-Providers are configured via LITELLM_MODEL env var:
-  ollama/qwen2.5:3b          (local default)
-  openai/gpt-4o-mini
-  anthropic/claude-haiku-4-5
-  gemini/gemini-1.5-flash
+Global model is read from settings. Each call site may pass an explicit
+`model` to override the global setting (used by LLMFunctionConfig).
+When `model` is None the global settings.litellm_model is used.
 
-Two surfaces:
-  complete_structured() — blocking, enforces JSON schema, returns parsed dict
-  stream_completion()   — streaming, yields raw text tokens for SSE display
+`api_base` is passed only for Ollama models (prefix "ollama/"); cloud
+providers (openai/, anthropic/, gemini/) resolve keys from the environment.
 """
 from __future__ import annotations
 
@@ -33,14 +30,15 @@ class LLMResponse(BaseModel):
     model: str
 
 
-def _base_kwargs(temperature: float, max_tokens: int) -> dict[str, Any]:
+def _base_kwargs(temperature: float, max_tokens: int, model: str | None = None) -> dict[str, Any]:
+    effective_model = model or settings.litellm_model
     kw: dict[str, Any] = dict(
-        model=settings.litellm_model,
+        model=effective_model,
         temperature=temperature,
         max_tokens=max_tokens,
         timeout=settings.litellm_timeout,
     )
-    if settings.litellm_api_base:
+    if effective_model.startswith("ollama/") and settings.litellm_api_base:
         kw["api_base"] = settings.litellm_api_base
     return kw
 
@@ -52,6 +50,7 @@ def complete_structured(
     schema: dict,
     temperature: float = 0.2,
     max_tokens: int = 800,
+    model: str | None = None,
 ) -> LLMResponse:
     """Blocking structured completion. Returns validated JSON."""
     schema_str = json.dumps(schema, indent=2)
@@ -61,7 +60,7 @@ def complete_structured(
         "Do not include any prose outside the JSON.\n\n"
         f"Schema:\n{schema_str}"
     )
-    kw = _base_kwargs(temperature, max_tokens)
+    kw = _base_kwargs(temperature, max_tokens, model)
     kw["messages"] = [
         {"role": "system", "content": system_full},
         {"role": "user", "content": user},
@@ -96,7 +95,10 @@ def complete_structured(
             raise LLMError(f"model returned non-JSON: {raw[:300]!r}") from e
 
     return LLMResponse(
-        content=parsed, raw=raw, latency_ms=latency_ms, model=settings.litellm_model,
+        content=parsed,
+        raw=raw,
+        latency_ms=latency_ms,
+        model=kw["model"],
     )
 
 
@@ -106,12 +108,10 @@ def stream_completion(
     user: str,
     temperature: float = 0.3,
     max_tokens: int = 800,
+    model: str | None = None,
 ) -> Iterator[str]:
-    """Yield text tokens from a streaming LLM completion.
-
-    No schema enforcement — callers display tokens directly (SSE).
-    """
-    kw = _base_kwargs(temperature, max_tokens)
+    """Yield text tokens from a streaming LLM completion."""
+    kw = _base_kwargs(temperature, max_tokens, model)
     kw["messages"] = [
         {"role": "system", "content": system},
         {"role": "user", "content": user},

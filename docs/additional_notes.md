@@ -194,7 +194,7 @@ def pin_clustering(session, run_id, name, notes=None):
 - `null_pct`, `distinct_count`, `distinct_pct`, `total_rows`
 - `stats` — JSONB with `min`, `max`, `mean`, `std`, `top_values`
 
-To add a new auto-detection rule, edit the `_detect_semantic_type(col, dtype, distinct_pct)` function in that file.
+To add a new auto-detection rule, edit the `_infer_semantic_type(col, dtype, total, distinct)` function in that file.
 
 ---
 
@@ -205,7 +205,7 @@ To add a new auto-detection rule, edit the `_detect_semantic_type(col, dtype, di
 - **Value overlap** — what fraction of values in one column exist in the other
 - **Subset check** — one column's value set is a subset of the other's
 
-The confidence score combines these signals. To add a new heuristic, extend `_score_pair()` in that file.
+The confidence score is `0.35 * name_score + 0.40 * subset_score + 0.25 * overlap_score`. To add a new signal, extend `_name_score()` or `_overlap_and_subset()` and adjust the weights in `discover_joins()`.
 
 ---
 

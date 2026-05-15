@@ -49,7 +49,11 @@ services:
     ports:
       - "5173:5173"
     environment:
-      BACKEND_URL: http://backend:8000
+      # host.docker.internal resolves to the Docker host on macOS and Windows
+      # (Docker Desktop). On Linux add: extra_hosts: ["host.docker.internal:host-gateway"]
+      BACKEND_URL: http://host.docker.internal:8000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     develop:
       watch:
         - action: sync

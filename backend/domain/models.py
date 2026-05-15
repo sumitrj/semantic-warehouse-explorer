@@ -287,6 +287,54 @@ class TableSpace(Base):
     source: Mapped["Source"] = relationship("Source")
 
 
+# ─── LLM Prompt Templates & Function Configs ──────────────────────────────────
+
+class PromptTemplate(Base):
+    """Versioned prompt stored in Postgres — no file-path dependency.
+
+    function_name identifies which cognitive function uses this prompt.
+    is_active marks the version currently used by that function (unless
+    LLMFunctionConfig.active_prompt_id overrides it explicitly).
+    variables is a list of {name, description} dicts for UI documentation.
+    """
+    __tablename__ = "prompt_templates"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    function_name: Mapped[str] = mapped_column(String(100), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    system_prompt: Mapped[str] = mapped_column(Text)
+    user_template: Mapped[str] = mapped_column(Text)
+    variables: Mapped[list] = mapped_column(JSONB, default=list)
+    version: Mapped[str] = mapped_column(String(20), default="v1")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class LLMFunctionConfig(Base):
+    """Per-function inference config: model, temperature, max_tokens, active prompt.
+
+    model is nullable — null means use the global settings.litellm_model.
+    active_prompt_id points to the PromptTemplate in use; if null the most
+    recent is_active template for this function_name is used.
+    """
+    __tablename__ = "llm_function_configs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    function_name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    temperature: Mapped[float] = mapped_column(Float, default=0.3)
+    max_tokens: Mapped[int] = mapped_column(Integer, default=600)
+    active_prompt_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("prompt_templates.id", use_alter=True, name="fk_llmfc_active_prompt"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class MLConfig(Base):
     """User's ML tool configuration for a source.
 
