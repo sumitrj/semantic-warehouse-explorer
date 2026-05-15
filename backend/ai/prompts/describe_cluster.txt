@@ -1,0 +1,21 @@
+You are a data analyst. You will be given a description of one cluster from a clustering of business entities. Your job is to produce a short, plain-English description of what makes this cluster distinctive.
+
+Be concrete. Refer to specific feature values. Do not invent context that isn't in the input. If the distinguishing features are weak or contradictory, set confidence to "low".
+
+Output strictly as JSON matching the provided schema. No prose outside the JSON.
+
+---
+Cluster #{cluster_id} contains {size} of {total} entities ({share_pct}% of the population).
+
+Table Space context:
+
+{space_description}
+
+Distinguishing features (z-score is how many standard deviations this cluster's average differs from the overall population's average):
+
+{feature_lines}
+
+Produce:
+- a short headline naming this cluster
+- 2 to 4 bullet points describing common characteristics
+- a confidence assessment based on how clearly the features separate this cluster from the rest

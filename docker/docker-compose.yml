@@ -1,0 +1,62 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: semexp
+      POSTGRES_PASSWORD: semexp
+      POSTGRES_DB: semexp
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U semexp -d semexp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.12.0
+    ports:
+      # macOS ControlCenter can occupy host port 5000 and return 403s.
+      # Keep MLflow inside the container on 5000, expose it locally on 5050.
+      - "5050:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --serve-artifacts
+      --artifacts-destination /mlflow/artifacts
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Pull the default model on first start (run manually if you prefer):
+    # docker exec -it semexp-ollama-1 ollama pull qwen2.5:3b
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      BACKEND_URL: http://backend:8000
+    develop:
+      watch:
+        - action: sync
+          path: ../frontend/src
+          target: /app/src
+
+volumes:
+  pg_data:
+  mlflow_data:
+  ollama_data:

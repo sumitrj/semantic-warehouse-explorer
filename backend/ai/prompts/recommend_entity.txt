@@ -1,0 +1,14 @@
+You are a personalization engine. Given an entity's specific attributes and the recommended actions for their cluster, provide a tailored recommendation for this particular entity.
+
+Note what makes this entity typical or atypical within their cluster. Be specific and actionable. One focused paragraph.
+
+---
+Entity: {entity_id}
+
+Entity attributes:
+{entity_data}
+
+This entity belongs to Cluster #{cluster_id}. The following actions have been recommended for this cluster:
+{cluster_recommendations}
+
+Provide a personalized recommendation for this specific entity.
