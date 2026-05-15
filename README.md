@@ -1,7 +1,16 @@
-# semexp — semantic data explorer
+# Semantic data explorer
 
-An abstract clustering tool. You point it at tabular data, define feature groups,
-slide weights, see clusters reshape in real time, and ask a local (or cloud) LLM
+This is a unique combination of LLMs and ML algorithms along with EDA tools to perform semantic exploration of data with the user. This is designed to enable deeper diagnostic insights, and is very primitive and abstract in current design (works though).
+
+Watch Demo Here:
+
+[Watch Demo](https://youtu.be/Ok3ZlZ9NWwc)
+
+[![Watch Demo](https://img.youtube.com/vi/Ok3ZlZ9NWwc/0.jpg)](https://www.youtube.com/watch?v=Ok3ZlZ9NWwc)
+
+
+
+You point it at tabular data, define feature groups, slide weights, see clusters reshape in real time, and ask a local (or cloud) LLM
 to describe what each cluster has in common. All clustering runs are logged to
 MLflow for lineage.
 
